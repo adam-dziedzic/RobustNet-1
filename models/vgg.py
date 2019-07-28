@@ -15,12 +15,12 @@ cfg = {
 
 
 class VGG(nn.Module):
-    def __init__(self, vgg_name, std):
+    def __init__(self, vgg_name, std, init_std=0.2):
         super(VGG, self).__init__()
         self.std = std
         self.features = self._make_layers(cfg[vgg_name])
         self.classifier = nn.Linear(512, 10)
-        self.init_noise = Noise(std)
+        self.init_noise = Noise(init_std)
 
     def forward(self, x):
         out = self.features(x)

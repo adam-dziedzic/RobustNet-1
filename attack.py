@@ -54,8 +54,8 @@ def weights_init(m):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--modelIn', type=str, default=None)
-    parser.add_argument('--c', type=float, default=1.0)
-    parser.add_argument('--noise', type=float, default=0)
+    parser.add_argument('--c', type=float, default=0.01)
+    parser.add_argument('--noise', type=float, default=0.1)
     opt = parser.parse_args()
 
     net = VGG("VGG16", opt.noise)
@@ -78,8 +78,8 @@ if __name__ == "__main__":
         tfs.ToTensor(),
         tfs.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
-    data = dst.CIFAR10("/home/luinx/data/cifar10-py", download=True, train=True, transform=transform_train)
-    data_test = dst.CIFAR10("/home/luinx/data/cifar10-py", download=True, train=False, transform=transform_test)
+    data = dst.CIFAR10("data/cifar10-py", download=True, train=True, transform=transform_train)
+    data_test = dst.CIFAR10("data/cifar10-py", download=True, train=False, transform=transform_test)
     assert data, data_test
     dataloader = DataLoader(data, batch_size=100, shuffle=True, num_workers=2)
     dataloader_test = DataLoader(data_test, batch_size=100, shuffle=True, num_workers=2)

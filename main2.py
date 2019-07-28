@@ -34,8 +34,9 @@ def loss(dataloader, net, loss_f):
         count += y.size()[0]
     return total_loss / count
 
-def train_other(dataloader, dataloader_test, net, loss_f, lr, name='adam', max_epoch=10):
+def train_other(dataloader, dataloader_test, net, loss_f, lr, name='adam', max_epoch=10, model_out=None):
     run_time = 0.0
+    min_train_loss = float('inf')
     if name == 'adam':
         optimizer = optim.Adam(net.parameters(), lr=lr)
     elif name == 'rmsprop':
@@ -55,7 +56,12 @@ def train_other(dataloader, dataloader_test, net, loss_f, lr, name='adam', max_e
             lossv.backward()
             optimizer.step()
         run_time += time.time() - beg
-        print("[Epoch {}] Time: {}, Train loss: {}, Train accuracy: {}, Test loss: {}, Test accuracy: {}".format(epoch, run_time, loss(dataloader, net, loss_f), accuracy(dataloader, net), loss(dataloader_test, net, loss_f), accuracy(dataloader_test, net)))
+        train_loss = loss(dataloader, net, loss_f)
+        if train_loss < min_train_loss:
+            min_train_loss = train_loss
+            if model_out is not None:
+                torch.save(net.state_dict(), model_out)
+        print("[Epoch {}] Time: {}, Train loss: {}, Train accuracy: {}, Test loss: {}, Test accuracy: {}".format(epoch, run_time, train_loss, accuracy(dataloader, net), loss(dataloader_test, net, loss_f), accuracy(dataloader_test, net)))
 
 
 def weights_init(m):
@@ -78,9 +84,10 @@ def main():
     parser.add_argument('--modelOut', type=str, default='vgg16/noise_0.03.pth')
     parser.add_argument('--method', type=str, default="momsgd")
     parser.add_argument('--noise', type=float, default=0.1)
+    parser.add_argumetn('--init_noise', type=float, default=0.2)
     opt = parser.parse_args()
     print(opt)
-    net = VGG("VGG16", opt.noise)
+    net = VGG("VGG16", std=opt.noise, init_std=opt.init_noise)
     #net = densenet_cifar()
     #net = GoogLeNet()
     #net = MobileNet(num_classes=100)
@@ -110,11 +117,9 @@ def main():
     dataloader = DataLoader(data, batch_size=opt.batchSize, shuffle=True, num_workers=2)
     dataloader_test = DataLoader(data_test, batch_size=opt.batchSize, shuffle=True, num_workers=2)
     for period in range(opt.epoch // 100):
-        train_other(dataloader, dataloader_test, net, loss_f, opt.lr, opt.method, 100)
+        train_other(dataloader, dataloader_test, net, loss_f, opt.lr, opt.method, 100, model_out=opt.modelOut)
         opt.lr /= 10
-    # save model
-    if opt.modelOut is not None:
-        torch.save(net.state_dict(), opt.modelOut)
+
 
 if __name__ == "__main__":
    main()
