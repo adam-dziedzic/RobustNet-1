@@ -9,7 +9,10 @@ class Noise(nn.Module):
         self.buffer = None
 
     def forward(self, x):
-        if self.training and self.std > 1.0e-6:
+        # We want the forward pass to be the same for the training and testing
+        # phases!
+        # if self.training and self.std > 1.0e-6:
+        if self.std > 1.0e-6:
             if self.buffer is None:
                 self.buffer = torch.Tensor(x.size()).normal_(0, self.std).cuda()
             else:

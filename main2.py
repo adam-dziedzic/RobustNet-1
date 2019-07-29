@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 
 import argparse
-import numpy as np
-import torch
 import torch.optim as optim
-import torch.nn as nn
-from torch.autograd import Variable
 import torchvision.datasets as dst
 import torchvision.transforms as tfs
 from models import *
 from torch.utils.data import DataLoader
 import time
+
 
 def accuracy(dataloader, net):
     data_iter = iter(dataloader)
@@ -23,6 +20,7 @@ def accuracy(dataloader, net):
         total += y.size()[0]
     return count / total
 
+
 def loss(dataloader, net, loss_f):
     data_iter = iter(dataloader)
     total_loss = 0.0
@@ -34,7 +32,9 @@ def loss(dataloader, net, loss_f):
         count += y.size()[0]
     return total_loss / count
 
-def train_other(dataloader, dataloader_test, net, loss_f, lr, name='adam', max_epoch=10, model_out=None):
+
+def train_other(dataloader, dataloader_test, net, loss_f, lr, name='adam',
+                max_epoch=10, model_out=None):
     run_time = 0.0
     min_train_loss = float('inf')
     if name == 'adam':
@@ -42,7 +42,8 @@ def train_other(dataloader, dataloader_test, net, loss_f, lr, name='adam', max_e
     elif name == 'rmsprop':
         optimizer = optim.RMSprop(net.parameters(), lr=lr)
     elif name == 'momsgd':
-        optimizer = optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=5.0e-4)
+        optimizer = optim.SGD(net.parameters(), lr=lr, momentum=0.9,
+                              weight_decay=5.0e-4)
     else:
         print('Not implemented')
         exit(-1)
@@ -61,7 +62,11 @@ def train_other(dataloader, dataloader_test, net, loss_f, lr, name='adam', max_e
             min_train_loss = train_loss
             if model_out is not None:
                 torch.save(net.state_dict(), model_out)
-        print("[Epoch {}] Time: {}, Train loss: {}, Train accuracy: {}, Test loss: {}, Test accuracy: {}".format(epoch, run_time, train_loss, accuracy(dataloader, net), loss(dataloader_test, net, loss_f), accuracy(dataloader_test, net)))
+        print(
+            "[Epoch {}] Time: {}, Train loss: {}, Train accuracy: {}, Test loss: {}, Test accuracy: {}".format(
+                epoch, run_time, train_loss, accuracy(dataloader, net),
+                loss(dataloader_test, net, loss_f),
+                accuracy(dataloader_test, net)))
 
 
 def weights_init(m):
@@ -74,6 +79,7 @@ def weights_init(m):
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--batchSize', type=int, default=128)
@@ -81,19 +87,19 @@ def main():
     parser.add_argument('--lr', type=float, default=0.1)
     parser.add_argument('--ngpu', type=int, default=1)
     parser.add_argument('--modelIn', type=str, default=None)
-    parser.add_argument('--modelOut', type=str, default='vgg16/noise_0.03.pth')
+    parser.add_argument('--modelOut', type=str, default='vgg16/noise_0.1.pth')
     parser.add_argument('--method', type=str, default="momsgd")
     parser.add_argument('--noise', type=float, default=0.1)
-    parser.add_argumetn('--init_noise', type=float, default=0.2)
+    parser.add_argument('--init_noise', type=float, default=0.2)
     opt = parser.parse_args()
     print(opt)
     net = VGG("VGG16", std=opt.noise, init_std=opt.init_noise)
-    #net = densenet_cifar()
-    #net = GoogLeNet()
-    #net = MobileNet(num_classes=100)
-    #net = stl10(32)
+    # net = densenet_cifar()
+    # net = GoogLeNet()
+    # net = MobileNet(num_classes=100)
+    # net = stl10(32)
     net = nn.DataParallel(net, device_ids=range(opt.ngpu))
-    #net = Test()
+    # net = Test()
     net.apply(weights_init)
     if opt.modelIn is not None:
         net.load_state_dict(torch.load(opt.modelIn))
@@ -110,16 +116,21 @@ def main():
     transform_test = tfs.Compose([
         tfs.ToTensor(),
         tfs.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-        ])
-    data = dst.CIFAR10("data/cifar10-py", download=True, train=True, transform=transform_train)
-    data_test = dst.CIFAR10("data/cifar10-py", download=True, train=False, transform=transform_test)
+    ])
+    data = dst.CIFAR10("data/cifar10-py", download=True, train=True,
+                       transform=transform_train)
+    data_test = dst.CIFAR10("data/cifar10-py", download=True, train=False,
+                            transform=transform_test)
     assert data, data_test
-    dataloader = DataLoader(data, batch_size=opt.batchSize, shuffle=True, num_workers=2)
-    dataloader_test = DataLoader(data_test, batch_size=opt.batchSize, shuffle=True, num_workers=2)
+    dataloader = DataLoader(data, batch_size=opt.batchSize, shuffle=True,
+                            num_workers=2)
+    dataloader_test = DataLoader(data_test, batch_size=opt.batchSize,
+                                 shuffle=True, num_workers=2)
     for period in range(opt.epoch // 100):
-        train_other(dataloader, dataloader_test, net, loss_f, opt.lr, opt.method, 100, model_out=opt.modelOut)
+        train_other(dataloader, dataloader_test, net, loss_f, opt.lr,
+                    opt.method, 100, model_out=opt.modelOut)
         opt.lr /= 10
 
 
 if __name__ == "__main__":
-   main()
+    main()
