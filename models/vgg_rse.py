@@ -14,7 +14,7 @@ cfg = {
 
 
 class VGG(nn.Module):
-    def __init__(self, vgg_name, init_noise, inner_noise, noise_type=None):
+    def __init__(self, vgg_name, init_noise, inner_noise, noise_type='empty'):
         super(VGG, self).__init__()
         self.init_noise = init_noise
         self.inner_noise = inner_noise
