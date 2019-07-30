@@ -1,10 +1,9 @@
 '''VGG11/13/16/19 in Pytorch.'''
-import torch
 import torch.nn as nn
-from torch.autograd import Variable
 from . import layer
 
 Noise = layer.Noise
+NoisePassBackward = layer.NoisePassBackward
 
 cfg = {
     'VGG11': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
@@ -15,10 +14,11 @@ cfg = {
 
 
 class VGG(nn.Module):
-    def __init__(self, vgg_name, init_noise, inner_noise):
+    def __init__(self, vgg_name, init_noise, inner_noise, noise_type=None):
         super(VGG, self).__init__()
         self.init_noise = init_noise
         self.inner_noise = inner_noise
+        self.noise_type = noise_type
         self.classifier = nn.Linear(512, 10)
         self.features = self._make_layers(cfg[vgg_name])
 
@@ -36,9 +36,19 @@ class VGG(nn.Module):
                 layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
             else:
                 if i == 1:
-                    noise_layer = Noise(self.init_noise)
+                    if self.noise_type == 'backward':
+                        noise_layer = NoisePassBackward(self.init_noise)
+                    elif self.noise_type == 'standard':
+                        noise_layer = Noise(self.init_noise)
+                    else:
+                        raise Exception(f'Unknown noise type: {self.noise_type}')
                 else:
-                    noise_layer = Noise(self.inner_noise)
+                    if self.noise_type == 'backward':
+                        noise_layer = NoisePassBackward(self.inner_noise)
+                    elif self.noise_type == 'standard':
+                        noise_layer = Noise(self.inner_noise)
+                    else:
+                        raise Exception(f'Unknown noise type: {self.noise_type}')
                 layers += [
                         noise_layer,
                         nn.Conv2d(in_channels, x, kernel_size=3, padding=1),

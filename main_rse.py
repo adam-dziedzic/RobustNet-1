@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
 
 import argparse
-import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn as nn
-from torch.autograd import Variable
 import torchvision.datasets as dst
 import torchvision.transforms as tfs
 import models
 from torch.utils.data import DataLoader
 import time
 import sys
-import copy
 
 stl10 = models.stl10_model_rse.stl10
 VGG = models.vgg_rse.VGG
@@ -26,14 +23,14 @@ def train(dataloader, net, loss_f, optimizer):
     correct = 0
     for x, y in dataloader:
         x, y = x.cuda(), y.cuda()
-        vx, vy = Variable(x), Variable(y)
         optimizer.zero_grad()
-        output = net(vx)
-        lossv = loss_f(output, vy)
+        output = net(x)
+        lossv = loss_f(output, y)
         lossv.backward()
         optimizer.step()
-        correct += y.eq(torch.max(output.data, 1)[1]).sum()
+        correct += y.eq(torch.max(output, 1)[1]).sum().item()
         total += y.numel()
+        # print('current accuracy: ', correct/total)
     run_time = time.time() - beg
     return run_time, correct / total
 
@@ -44,13 +41,12 @@ def test(dataloader, net, best_acc, model_out):
     correct = 0
     for x, y in dataloader:
         x, y = x.cuda(), y.cuda()
-        vx = Variable(x, volatile=True)
-        output = net(vx)
-        correct += y.eq(torch.max(output.data, 1)[1]).sum()
+        output = net(x)
+        correct += y.eq(torch.max(output, 1)[1]).sum().item()
         total += y.numel()
     acc = correct / total
     if acc > best_acc:
-        torch.save(net.state_dict(), model_out)
+        torch.save(net.state_dict(), model_out + '-test-accuracy-' + str(acc))
         return acc, acc
     else:
         return acc, best_acc
@@ -68,19 +64,20 @@ def weights_init(m):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str)
+    parser.add_argument('--dataset', type=str, default='cifar10')
     parser.add_argument('--batchSize', type=int, default=128)
-    parser.add_argument('--lr', type=float, default=1.0)
+    parser.add_argument('--lr', type=float, default=0.1)
     parser.add_argument('--ngpu', type=int, default=1)
-    parser.add_argument('--net', type=str, default=None)
-    parser.add_argument('--modelOut', type=str, default=None)
+    parser.add_argument('--net', type=str, default='vgg16')
+    parser.add_argument('--modelOut', type=str, default='vgg16/rse_0.2_0.1.pth')
     parser.add_argument('--method', type=str, default="momsgd")
     parser.add_argument('--root', type=str, default="./data/cifar10-py")
-    parser.add_argument('--noiseInit', type=float, required=True)
-    parser.add_argument('--noiseInner', type=float, required=True)
+    parser.add_argument('--noiseInit', type=float, default=0.2)
+    parser.add_argument('--noiseInner', type=float, default=0.1)
     opt = parser.parse_args()
     print(opt)
-    epochs = [80, 60, 40, 20]
+    # epochs = [80, 60, 40, 20]
+    epochs = [120, 100, 80, 50]
     if opt.net is None:
         print("opt.net must be specified")
         exit(-1)
