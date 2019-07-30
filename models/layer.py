@@ -40,8 +40,8 @@ class NoiseFunction(torch.autograd.Function):
         # ctx.save_for_backward(input)
         # print("round forward")
         NoiseFunction.mark_dirty(x)
-        # noise = torch.zeros_like(x).normal_(0, std).to(x.device)
-        noise = n.sample(x.shape).squeeze().to(x.device)
+        noise = torch.zeros_like(x).normal_(mean=0, std=n).to(x.device)
+        # noise = n.sample(x.shape).squeeze().to(x.device)
         return x + noise
 
     @staticmethod
@@ -62,8 +62,8 @@ class NoiseFunction(torch.autograd.Function):
 class NoisePassBackward(nn.Module):
     def __init__(self, std):
         super(NoisePassBackward, self).__init__()
-        self.std = std
-        self.n = tdist.Normal(torch.tensor([0.0]), torch.tensor([std]))
+        self.n = std
+        # self.n = tdist.Normal(torch.tensor([0.0]), torch.tensor([std]))
 
     def forward(self, input):
         """

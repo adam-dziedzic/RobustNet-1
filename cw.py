@@ -107,7 +107,7 @@ def acc_under_attack(dataloader, net, c, attack_f, opt, netAttack=None):
         bounds = (0.0, 1.0)
         if opt.channel == 'empty':
             pass
-        if opt.channel == 'gauss_numpy':
+        elif opt.channel == 'gauss_numpy':
             adverse_v += gauss_noise_numpy(epsilon=opt.epsilon, images=adverse_v, bounds=bounds)
         elif opt.channel == 'gauss_torch':
             adverse_v += gauss_noise_torch(epsilon=opt.epsilon, images=adverse_v, bounds=bounds)
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     parser.add_argument('--root', type=str, default='data/cifar10-py')
     parser.add_argument('--mode', type=str, default='test') # peek or test
     parser.add_argument('--ensemble', type=int, default=1)
-    parser.add_argument('--batch_size', type=int, default=256)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--channel', type=str,
                         # default='gauss_torch'
                         default='empty'
@@ -280,9 +280,9 @@ if __name__ == "__main__":
         exit(-1)
     assert data_test
     dataloader_test = DataLoader(data_test, batch_size=opt.batch_size, shuffle=False)
-    print(f'Test accuracy on clean data for net: {test_accuracy(dataloader_test, net)}')
-    if netAttack is not None:
-        print(f'Test accuracy on clean data for netAttack: {test_accuracy(dataloader_test, netAttack)}')
+    # print(f'Test accuracy on clean data for net: {test_accuracy(dataloader_test, net)}')
+    # if netAttack is not None:
+    #     print(f'Test accuracy on clean data for netAttack: {test_accuracy(dataloader_test, netAttack)}')
     if opt.mode == 'peek':
         peek(dataloader_test, net, src_net, opt.c[0], attack_f, denormalize_layer)
     elif opt.mode == 'test':
