@@ -28,7 +28,7 @@ def gauss_noise_torch(epsilon, images, bounds):
     noise = torch.zeros_like(images, requires_grad=False).normal_(0, std).to(images.device)
     return noise
 
-def attack_cw(input_v, label_v, net, c, untarget=True, n_class=10):
+def attack_cw(input_v, label_v, net, c, opt, untarget=True, n_class=10):
     net.eval()
     #net.train()
     index = label_v.cpu().view(-1, 1)
@@ -39,12 +39,17 @@ def attack_cw(input_v, label_v, net, c, untarget=True, n_class=10):
     w_v = w.requires_grad_(True)
     optimizer = optim.Adam([w_v], lr=1.0e-3)
     zero_v = torch.tensor([0.0], requires_grad=False).cuda()
-    for _ in range(300):
+    batch_size = input_v.size()[0]
+    for _ in range(opt.attack_iters):
         net.zero_grad()
         optimizer.zero_grad()
         adverse_v = 0.5 * (torch.tanh(w_v) + 1.0)
         diff = adverse_v - input_v
-        output = net(adverse_v)
+        logits = torch.zeros(batch_size, n_class).cuda()
+        for i in range(opt.gradient_iters):
+            logits += net(adverse_v)
+        # output = logits / batch_size
+        output = logits
         real = (torch.max(torch.mul(output, label_onehot_v), 1)[0])
         other = (torch.max(torch.mul(output, (1-label_onehot_v))-label_onehot_v*10000,1)[0])
         error = torch.sum(diff * diff)
@@ -102,7 +107,7 @@ def acc_under_attack(dataloader, net, c, attack_f, opt, netAttack=None):
         # attack
         if netAttack is None:
             netAttack = net
-        adverse_v, diff = attack_f(input_v, label_v, netAttack, c)
+        adverse_v, diff = attack_f(input_v, label_v, netAttack, c, opt)
         print('min max: ', adverse_v.min().item(), adverse_v.max().item())
         bounds = (0.0, 1.0)
         if opt.channel == 'empty':
@@ -168,7 +173,7 @@ def test_accuracy(dataloader, net):
 
 
 if __name__ == "__main__":
-    if True:
+    if False:
         model = 'rse_0.0_0.0_ady.pth-test-accuracy-0.8523'
         modelAttack = model
         noiseInit = 0.0
@@ -193,10 +198,11 @@ if __name__ == "__main__":
         model = 'rse_0.2_0.0_ady.pth-test-accuracy-0.8553'
         noiseInit = 0.2
         noiseInner = 0.0
-    if False:
+    if True:
         model = 'rse_0.2_0.1_ady.pth-test-accuracy-0.8728'
         # modelAttack = 'rse_0.0_0.0_ady.pth-test-accuracy-0.8523'
-        modelAttack = 'rse_0.2_0.1_ady.pth-test-accuracy-0.8728'
+        # modelAttack = 'rse_0.2_0.1_ady.pth-test-accuracy-0.8728'
+        modelAttack = model
         noiseInit = 0.2
         noiseInner = 0.1
     if False:
@@ -220,7 +226,7 @@ if __name__ == "__main__":
     parser.add_argument('--noiseInner', type=float, default=noiseInner)
     parser.add_argument('--root', type=str, default='data/cifar10-py')
     parser.add_argument('--mode', type=str, default='test') # peek or test
-    parser.add_argument('--ensemble', type=int, default=1)
+    parser.add_argument('--ensemble', type=int, default=50)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--channel', type=str,
                         # default='gauss_torch'
@@ -228,9 +234,11 @@ if __name__ == "__main__":
                         )
     parser.add_argument('--epsilon', type=float, default=0.04)
     parser.add_argument('--noise_type', type=str,
-                        # default='standard',
-                        default='backward',
+                        default='standard',
+                        # default='backward',
                         )
+    parser.add_argument('--attack_iters', type=int, default=300)
+    parser.add_argument('--gradient_iters', type=int, default=50)
 
     opt = parser.parse_args()
     # parse c
@@ -250,8 +258,9 @@ if __name__ == "__main__":
             net = models.vgg_rse.VGG("VGG16", opt.noiseInit,
                                      opt.noiseInner,
                                      noise_type='standard')
-            netAttack = models.vgg_rse.VGG("VGG16", opt.noiseInit, opt.noiseInner,
-                                     noise_type=opt.noise_type)
+            netAttack = models.vgg_rse.VGG("VGG16", opt.noiseInit,
+                                           opt.noiseInner,
+                                           noise_type=opt.noise_type)
             # netAttack = models.vgg_rse.VGG("VGG16", init_noise=0.0,
             #                                inner_noise=0.0,
             #                                noise_type='standard')
