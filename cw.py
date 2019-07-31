@@ -10,6 +10,7 @@ import torchvision.datasets as dst
 from torch.utils.data import DataLoader
 import numpy as np
 import models
+import time
 
 nprng = np.random.RandomState()
 nprng.seed(31)
@@ -32,14 +33,14 @@ def attack_cw(input_v, label_v, net, c, opt, untarget=True, n_class=10):
     net.eval()
     #net.train()
     index = label_v.cpu().view(-1, 1)
-    label_onehot = torch.zeros(input_v.size()[0], n_class, requires_grad=False)
-    label_onehot.scatter_(1, index, 1)
+    batch_size = input_v.size()[0]
+    label_onehot = torch.zeros(batch_size, n_class, requires_grad=False)
+    label_onehot.scatter_(dim=1, index=index, value=1)
     label_onehot_v = label_onehot.cuda()
     w = 0.5 * torch.log(input_v / (1 - input_v))
     w_v = w.requires_grad_(True)
     optimizer = optim.Adam([w_v], lr=1.0e-3)
     zero_v = torch.tensor([0.0], requires_grad=False).cuda()
-    batch_size = input_v.size()[0]
     for _ in range(opt.attack_iters):
         net.zero_grad()
         optimizer.zero_grad()
@@ -48,7 +49,7 @@ def attack_cw(input_v, label_v, net, c, opt, untarget=True, n_class=10):
         logits = torch.zeros(batch_size, n_class).cuda()
         for i in range(opt.gradient_iters):
             logits += net(adverse_v)
-        # output = logits / batch_size
+        # output = logits / opt.gradient_iters
         output = logits
         real = (torch.max(torch.mul(output, label_onehot_v), 1)[0])
         other = (torch.max(torch.mul(output, (1-label_onehot_v))-label_onehot_v*10000,1)[0])
@@ -103,12 +104,13 @@ def acc_under_attack(dataloader, net, c, attack_f, opt, netAttack=None):
     distort = 0.0
     distort_np = 0.0
     for k, (input, output) in enumerate(dataloader):
+        beg = time.time()
         input_v, label_v = input.cuda(), output.cuda()
         # attack
         if netAttack is None:
             netAttack = net
         adverse_v, diff = attack_f(input_v, label_v, netAttack, c, opt)
-        print('min max: ', adverse_v.min().item(), adverse_v.max().item())
+        # print('min max: ', adverse_v.min().item(), adverse_v.max().item())
         bounds = (0.0, 1.0)
         if opt.channel == 'empty':
             pass
@@ -130,8 +132,9 @@ def acc_under_attack(dataloader, net, c, attack_f, opt, netAttack=None):
 
         distort_np = distort.clone().cpu().detach().numpy()
 
-        print("k, current accuracy, distortion: ", k, correct / tot,
-              np.sqrt(distort_np / tot))
+        elapsed = time.time() - beg
+        print("k, current accuracy, distortion, total, time (sec): ", k, ',', correct / tot,
+              ',', np.sqrt(distort_np / tot), ',', tot, ',', elapsed)
 
         # This is a bit unexpected (shortens computations):
         if k >= 15:
@@ -221,7 +224,7 @@ if __name__ == "__main__":
                         )
     parser.add_argument('--modelInAttack', type=str,
                         default='./vgg16/' + modelAttack)
-    parser.add_argument('--c', type=str, default='0.01')
+    parser.add_argument('--c', type=str, default='0.001')
     parser.add_argument('--noiseInit', type=float, default=noiseInit)
     parser.add_argument('--noiseInner', type=float, default=noiseInner)
     parser.add_argument('--root', type=str, default='data/cifar10-py')
@@ -232,13 +235,13 @@ if __name__ == "__main__":
                         # default='gauss_torch'
                         default='empty'
                         )
-    parser.add_argument('--epsilon', type=float, default=0.04)
+    parser.add_argument('--epsilon', type=float, default=0.0)
     parser.add_argument('--noise_type', type=str,
-                        default='standard',
-                        # default='backward',
+                        # default='standard',
+                        default='backward',
                         )
     parser.add_argument('--attack_iters', type=int, default=300)
-    parser.add_argument('--gradient_iters', type=int, default=50)
+    parser.add_argument('--gradient_iters', type=int, default=10)
 
     opt = parser.parse_args()
     # parse c
