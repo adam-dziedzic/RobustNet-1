@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-device=1
+device=0
 dataset=cifar10
 root=data/cifar10-py
 net=vgg16
@@ -16,10 +16,10 @@ noise_init=0.2
 noise_inner=0.1
 noise_type='backward'
 mode=test
-ensemble=50
-attack_iters=600
+ensemble=1
+attack_iters=300
 gradient_iters=100
 batch_size=32
 log=./accuracy/cw_${dataset}_${net}_${defense}_${noise_init}_${noise_inner}_${attack_iters}_${gradient_iters}ady.acc
 
-CUDA_VISIBLE_DEVICES=${device} /home/${USER}/anaconda3/bin/python3.6 cw.py --batch_size ${batch_size} --dataset ${dataset} --net ${net} --defense ${defense} --modelIn ${model_in} --modelInAttack ${modelInAttack} --c ${c} --noiseInit ${noise_init} --noiseInner ${noise_inner} --noise_type ${noise_type} --root ${root} --mode ${mode} --ensemble ${ensemble} --attack_iters ${attack_iters} --gradient_iters ${gradient_iters} > ${log}
+CUDA_VISIBLE_DEVICES=${device} /home/${USER}/anaconda3/bin/python3.6 cw.py --batch_size ${batch_size} --dataset ${dataset} --net ${net} --defense ${defense} --modelIn ${model_in} --modelInAttack ${modelInAttack} --c ${c} --noiseInit ${noise_init} --noiseInner ${noise_inner} --noise_type ${noise_type} --root ${root} --mode ${mode} --ensemble ${ensemble} --attack_iters ${attack_iters} --gradient_iters ${gradient_iters}

@@ -29,6 +29,9 @@ def gauss_noise_torch(epsilon, images, bounds):
     noise = torch.zeros_like(images, requires_grad=False).normal_(0, std).to(images.device)
     return noise
 
+def attack_cw_foolbox():
+    pass
+
 def attack_cw(input_v, label_v, net, c, opt, untarget=True, n_class=10):
     net.eval()
     #net.train()
@@ -49,8 +52,8 @@ def attack_cw(input_v, label_v, net, c, opt, untarget=True, n_class=10):
         logits = torch.zeros(batch_size, n_class).cuda()
         for i in range(opt.gradient_iters):
             logits += net(adverse_v)
-        # output = logits / opt.gradient_iters
-        output = logits
+        output = logits / opt.gradient_iters
+        # output = logits
         real = (torch.max(torch.mul(output, label_onehot_v), 1)[0])
         other = (torch.max(torch.mul(output, (1-label_onehot_v))-label_onehot_v*10000,1)[0])
         error = torch.sum(diff * diff)
@@ -224,7 +227,7 @@ if __name__ == "__main__":
                         )
     parser.add_argument('--modelInAttack', type=str,
                         default='./vgg16/' + modelAttack)
-    parser.add_argument('--c', type=str, default='0.001')
+    parser.add_argument('--c', type=str, default='0.01')
     parser.add_argument('--noiseInit', type=float, default=noiseInit)
     parser.add_argument('--noiseInner', type=float, default=noiseInner)
     parser.add_argument('--root', type=str, default='data/cifar10-py')
@@ -237,11 +240,11 @@ if __name__ == "__main__":
                         )
     parser.add_argument('--epsilon', type=float, default=0.0)
     parser.add_argument('--noise_type', type=str,
-                        # default='standard',
-                        default='backward',
+                        default='standard',
+                        # default='backward',
                         )
     parser.add_argument('--attack_iters', type=int, default=300)
-    parser.add_argument('--gradient_iters', type=int, default=10)
+    parser.add_argument('--gradient_iters', type=int, default=100)
 
     opt = parser.parse_args()
     # parse c
@@ -261,10 +264,10 @@ if __name__ == "__main__":
             net = models.vgg_rse.VGG("VGG16", opt.noiseInit,
                                      opt.noiseInner,
                                      noise_type='standard')
-            netAttack = net
-            # netAttack = models.vgg_rse.VGG("VGG16", opt.noiseInit,
-            #                                opt.noiseInner,
-            #                                noise_type=opt.noise_type)
+            # netAttack = net
+            netAttack = models.vgg_rse.VGG("VGG16", opt.noiseInit,
+                                           opt.noiseInner,
+                                           noise_type=opt.noise_type)
             # netAttack = models.vgg_rse.VGG("VGG16", init_noise=0.0,
             #                                inner_noise=0.0,
             #                                noise_type='standard')
