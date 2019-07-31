@@ -264,10 +264,10 @@ if __name__ == "__main__":
             net = models.vgg_rse.VGG("VGG16", opt.noiseInit,
                                      opt.noiseInner,
                                      noise_type='standard')
-            # netAttack = net
-            netAttack = models.vgg_rse.VGG("VGG16", opt.noiseInit,
-                                           opt.noiseInner,
-                                           noise_type=opt.noise_type)
+            netAttack = net
+            # netAttack = models.vgg_rse.VGG("VGG16", opt.noiseInit,
+            #                                opt.noiseInner,
+            #                                noise_type=opt.noise_type)
             # netAttack = models.vgg_rse.VGG("VGG16", init_noise=0.0,
             #                                inner_noise=0.0,
             #                                noise_type='standard')

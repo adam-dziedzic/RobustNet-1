@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-device=0
+device=1
 dataset=cifar10
 root=data/cifar10-py
 net=vgg16
@@ -18,7 +18,7 @@ noise_type='backward'
 mode=test
 ensemble=1
 attack_iters=300
-gradient_iters=100
+gradient_iters=300
 batch_size=32
 log=./accuracy/cw_${dataset}_${net}_${defense}_${noise_init}_${noise_inner}_${attack_iters}_${gradient_iters}ady.acc
 
