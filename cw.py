@@ -258,9 +258,10 @@ if __name__ == "__main__":
             net = models.vgg_rse.VGG("VGG16", opt.noiseInit,
                                      opt.noiseInner,
                                      noise_type='standard')
-            netAttack = models.vgg_rse.VGG("VGG16", opt.noiseInit,
-                                           opt.noiseInner,
-                                           noise_type=opt.noise_type)
+            netAttack = net
+            # netAttack = models.vgg_rse.VGG("VGG16", opt.noiseInit,
+            #                                opt.noiseInner,
+            #                                noise_type=opt.noise_type)
             # netAttack = models.vgg_rse.VGG("VGG16", init_noise=0.0,
             #                                inner_noise=0.0,
             #                                noise_type='standard')
@@ -284,7 +285,7 @@ if __name__ == "__main__":
     net.load_state_dict(torch.load(opt.modelIn))
     net.cuda()
 
-    if netAttack is not None:
+    if netAttack is not None and id(net) != id(netAttack):
         netAttack = nn.DataParallel(netAttack, device_ids=range(1))
         netAttack.load_state_dict(torch.load(opt.modelInAttack))
         netAttack.cuda()
