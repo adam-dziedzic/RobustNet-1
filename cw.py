@@ -168,16 +168,35 @@ def test_accuracy(dataloader, net):
 
 
 if __name__ == "__main__":
+    if True:
+        model = 'rse_0.0_0.0_ady.pth-test-accuracy-0.8523'
+        modelAttack = model
+        noiseInit = 0.0
+        noiseInner = 0.0
     if False:
         model = 'rse_0.0_0.0_ady.pth-test-accuracy-0.8523'
-        noiseInit = 0.0
+        modelAttack = model
+        noiseInit = 0.017
+        noiseInner = 0.0
+    if False:
+        model='rse_0.03_0.0_ady.pth-test-accuracy-0.8574'
+        modelAttack = model
+        noiseInit = 0.03
+        noiseInner = 0.0
+    if False:
+        model='rse_0.017_0.0_ady.pth-test-accuracy-0.8392'
+        # modelAttack = model
+        modelAttack = 'rse_0.0_0.0_ady.pth-test-accuracy-0.8523'
+        noiseInit = 0.017
         noiseInner = 0.0
     if False:
         model = 'rse_0.2_0.0_ady.pth-test-accuracy-0.8553'
         noiseInit = 0.2
         noiseInner = 0.0
-    if True:
+    if False:
         model = 'rse_0.2_0.1_ady.pth-test-accuracy-0.8728'
+        # modelAttack = 'rse_0.0_0.0_ady.pth-test-accuracy-0.8523'
+        modelAttack = 'rse_0.2_0.1_ady.pth-test-accuracy-0.8728'
         noiseInit = 0.2
         noiseInner = 0.1
     if False:
@@ -194,6 +213,8 @@ if __name__ == "__main__":
                         # default='./vgg16/rse_0.2_0.1_ady.pth-test-accuracy-0.8728'
                         default='./vgg16/' + model
                         )
+    parser.add_argument('--modelInAttack', type=str,
+                        default='./vgg16/' + modelAttack)
     parser.add_argument('--c', type=str, default='0.01')
     parser.add_argument('--noiseInit', type=float, default=noiseInit)
     parser.add_argument('--noiseInner', type=float, default=noiseInner)
@@ -207,12 +228,14 @@ if __name__ == "__main__":
                         )
     parser.add_argument('--epsilon', type=float, default=0.04)
     parser.add_argument('--noise_type', type=str,
-                        # default=None,
-                        default='backward')
+                        # default='standard',
+                        default='backward',
+                        )
 
     opt = parser.parse_args()
     # parse c
     opt.c = [float(c) for c in opt.c.split(',')]
+    print('params: ', opt)
     print('input model: ', opt.modelIn)
     if opt.mode == 'peek' and len(opt.c) != 1:
         print("When opt.mode == 'peek', then only one 'c' is allowed")
@@ -224,10 +247,14 @@ if __name__ == "__main__":
         elif opt.defense == "brelu":
             net = models.vgg_brelu.VGG("VGG16", 0.0)
         elif opt.defense == "rse":
-            net = models.vgg_rse.VGG("VGG16", opt.noiseInit, opt.noiseInner,
+            net = models.vgg_rse.VGG("VGG16", opt.noiseInit,
+                                     opt.noiseInner,
                                      noise_type='standard')
             netAttack = models.vgg_rse.VGG("VGG16", opt.noiseInit, opt.noiseInner,
                                      noise_type=opt.noise_type)
+            # netAttack = models.vgg_rse.VGG("VGG16", init_noise=0.0,
+            #                                inner_noise=0.0,
+            #                                noise_type='standard')
     elif opt.net == "resnext":
         if opt.defense in ("plain", "adv", "dd"):
             net = models.resnext.ResNeXt29_2x64d()
@@ -243,13 +270,14 @@ if __name__ == "__main__":
             net = models.stl10_model_brelu.stl10(32, 0.0)
         elif opt.defense == "rse":
             net = models.stl10_model_rse.stl10(32, opt.noiseInit, opt.noiseInner)
+
     net = nn.DataParallel(net, device_ids=range(1))
     net.load_state_dict(torch.load(opt.modelIn))
     net.cuda()
 
     if netAttack is not None:
         netAttack = nn.DataParallel(netAttack, device_ids=range(1))
-        netAttack.load_state_dict(torch.load(opt.modelIn))
+        netAttack.load_state_dict(torch.load(opt.modelInAttack))
         netAttack.cuda()
 
     loss_f = nn.CrossEntropyLoss()
@@ -280,9 +308,9 @@ if __name__ == "__main__":
         exit(-1)
     assert data_test
     dataloader_test = DataLoader(data_test, batch_size=opt.batch_size, shuffle=False)
-    # print(f'Test accuracy on clean data for net: {test_accuracy(dataloader_test, net)}')
-    # if netAttack is not None:
-    #     print(f'Test accuracy on clean data for netAttack: {test_accuracy(dataloader_test, netAttack)}')
+    print(f'Test accuracy on clean data for net: {test_accuracy(dataloader_test, net)}')
+    if netAttack is not None:
+        print(f'Test accuracy on clean data for netAttack: {test_accuracy(dataloader_test, netAttack)}')
     if opt.mode == 'peek':
         peek(dataloader_test, net, src_net, opt.c[0], attack_f, denormalize_layer)
     elif opt.mode == 'test':
