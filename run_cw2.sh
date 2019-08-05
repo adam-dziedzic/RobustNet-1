@@ -14,11 +14,11 @@ modelInAttack=./${net}/rse_0.2_0.1_ady.pth-test-accuracy-0.8728
 # #c=0.01
 noise_init=0.2
 noise_inner=0.1
-noise_type='backward'
+noise_type='standard'
 mode=test
-ensemble=1
-attack_iters=300
-gradient_iters=300
+ensemble=50
+attack_iters=1000
+gradient_iters=10
 batch_size=32
 log=./accuracy/cw_${dataset}_${net}_${defense}_${noise_init}_${noise_inner}_${attack_iters}_${gradient_iters}ady.acc
 
