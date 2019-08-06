@@ -192,8 +192,8 @@ def acc_under_attack(dataloader, net, c, attack_f, opt, netAttack=None):
         # print(','.join([str(x) for x in info]))
 
         # This is a bit unexpected (shortens computations):
-        if k >= 4:
-            break
+        # if k >= 4:
+        #     break
 
     return correct / tot, np.sqrt(distort_np / tot)
 
