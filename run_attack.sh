@@ -17,7 +17,8 @@ noise_inner=0.0
 mode=test
 ensemble=1
 channel='uniform'
+noise_epsilon=0.03
 log=./accuracy/cw_${dataset}_${net}_${defense}_${noise_init}_${noise_inner}_ady.acc
 
-CUDA_VISIBLE_DEVICES=${device} /home/${USER}/anaconda3/bin/python3.6 attack.py --dataset ${dataset} --net ${net} --defense ${defense} --modelIn ${model_in} --c ${c} --noiseInit ${noise_init} --noiseInner ${noise_inner} --root ${root} --mode ${mode} --ensemble ${ensemble} --channel ${channel} > ${log} 2>&1 &
+CUDA_VISIBLE_DEVICES=${device} /home/${USER}/anaconda3/bin/python3.6 attack.py --dataset ${dataset} --net ${net} --defense ${defense} --modelIn ${model_in} --c ${c} --noiseInit ${noise_init} --noiseInner ${noise_inner} --root ${root} --mode ${mode} --ensemble ${ensemble} --channel ${channel} --noise_epsilon=${noise_epsilon} > ${log} 2>&1 &
 echo ${log}

@@ -384,7 +384,7 @@ if __name__ == "__main__":
         transform_test = tfs.Compose([
             tfs.ToTensor(),
         ])
-        data_test = dst.CIFAR10(opt.root, download=False, train=False,
+        data_test = dst.CIFAR10(opt.root, download=True, train=False,
                                 transform=transform_test)
     elif opt.dataset == 'stl10':
         transform_train = tfs.Compose([
@@ -395,7 +395,7 @@ if __name__ == "__main__":
         transform_test = tfs.Compose([
             tfs.ToTensor(),
         ])
-        data_test = dst.STL10(opt.root, split='test', download=False,
+        data_test = dst.STL10(opt.root, split='test', download=True,
                               transform=transform_test)
     else:
         print("Invalid dataset")
