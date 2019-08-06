@@ -12,27 +12,14 @@ import numpy as np
 import models
 import time
 from eot_pgd import EOT_PGD
+from raw_pgd import RAW_PGD
 from eot_cw import EOT_CW
-
-nprng = np.random.RandomState()
-nprng.seed(31)
-
-
-def gauss_noise_numpy(epsilon, images, bounds):
-    min_, max_ = bounds
-    std = epsilon / np.sqrt(3) * (max_ - min_)
-    noise = nprng.normal(scale=std, size=images.shape)
-    noise = torch.from_numpy(noise)
-    noise = noise.to(images.device).to(images.dtype)
-    return noise
-
-
-def gauss_noise_torch(epsilon, images, bounds):
-    min_, max_ = bounds
-    std = epsilon / np.sqrt(3) * (max_ - min_)
-    noise = torch.zeros_like(images, requires_grad=False).normal_(0, std).to(
-        images.device)
-    return noise
+from channels import fft_channel
+from channels import round
+from channels import gauss_noise_torch
+from channels import uniform_noise_torch
+from channels import compress_svd_batch
+from channels import laplace_noise_torch
 
 
 def attack_cw_foolbox():
@@ -44,6 +31,10 @@ def attack_eot_pgd(input_v, label_v, net, epsilon=8.0 / 255.0, opt=None):
     adverse_v = eot.eot_batch(images=input_v, labels=label_v)
     diff = adverse_v - input_v
     return adverse_v, diff
+
+
+def attack_raw_pgd(input_v, label_v, net, epsilon=8.0 / 255.0, opt=None):
+    raw_pgd = RAW_PGD(model=net, )
 
 
 def attack_eot_cw(input_v, label_v, net, c, opt, untarget=True, n_class=10):
@@ -82,8 +73,9 @@ def attack_cw(input_v, label_v, net, c, opt, untarget=True, n_class=10):
         # much smaller so that they are not chosen as the other max class.
         # Then from the logits of other classes find the maximum one.
         other = (
-        torch.max(torch.mul(output, (1 - label_onehot)) - label_onehot * 10000,
-                  1)[0])
+            torch.max(
+                torch.mul(output, (1 - label_onehot)) - label_onehot * 10000,
+                1)[0])
         # The squared L2 loss of the difference between the adversarial
         # example and the input image.
         diff = adverse_v - input_v
@@ -156,12 +148,26 @@ def acc_under_attack(dataloader, net, c, attack_f, opt, netAttack=None):
         bounds = (0.0, 1.0)
         if opt.channel == 'empty':
             pass
-        elif opt.channel == 'gauss_numpy':
-            adverse_v += gauss_noise_numpy(epsilon=opt.epsilon,
+        elif opt.channel == 'gauss':
+            adverse_v += gauss_noise_torch(epsilon=opt.noise_epsilon,
                                            images=adverse_v, bounds=bounds)
-        elif opt.channel == 'gauss_torch':
-            adverse_v += gauss_noise_torch(epsilon=opt.epsilon,
-                                           images=adverse_v, bounds=bounds)
+        elif opt.channel == 'round':
+            adverse_v = round(values_per_channel=opt.noise_epsilon,
+                              images=adverse_v)
+        elif opt.channel == 'fft':
+            adverse_v = fft_channel(input=adverse_v,
+                                    compress_rate=opt.noise_epsilon)
+        elif opt.channel == 'uniform':
+            adverse_v += uniform_noise_torch(epsilon=opt.noise_epsilon,
+                                             images=adverse_v,
+                                             bounds=bounds)
+        elif opt.channel == 'laplace':
+            adverse_v += laplace_noise_torch(epsilon=opt.noise_epsilon,
+                                             images=adverse_v,
+                                             bounds=bounds)
+        elif opt.channel == 'svd':
+            adverse_v = compress_svd_batch(x=adverse_v,
+                                           compress_rate=opt.noise_epsilon)
         else:
             raise Exception(f'Unknown channel: {opt.channel}')
         # defense
@@ -183,10 +189,10 @@ def acc_under_attack(dataloader, net, c, attack_f, opt, netAttack=None):
                 np.sqrt(distort_np / tot), 'Linf distortion',
                 distort_linf_np / tot, 'total_count', tot, 'elapsed time (sec)',
                 elapsed]
-        print(','.join([str(x) for x in info]))
+        # print(','.join([str(x) for x in info]))
 
         # This is a bit unexpected (shortens computations):
-        if k >= 25:
+        if k >= 4:
             break
 
     return correct / tot, np.sqrt(distort_np / tot)
@@ -228,7 +234,7 @@ def test_accuracy(dataloader, net):
 
 if __name__ == "__main__":
 
-    mod = '2-1'  # mode init noise - inner noise
+    mod = '0-0'  # mode init noise - inner noise
     if mod == '0-0':
         model = 'rse_0.0_0.0_ady.pth-test-accuracy-0.8523'
         modelAttack = model
@@ -281,28 +287,42 @@ if __name__ == "__main__":
                         )
     parser.add_argument('--modelInAttack', type=str,
                         default='./vgg16/' + modelAttack)
-    parser.add_argument('--c', type=str, default='0.01 0.005 0.001 0.0005 0.0001')
+    parser.add_argument('--c', type=str,
+                        default='0.0,0.0001,0.0005,0.001,0.005,0.01,0.05,0.1,0.5,1.0,10.0,100.0',
+                        # default = '1.0 10.0 100.0 1000.0',
+                        # default='0.05,0.1,0.5,1.0,10.0,100.0',
+                        )
     parser.add_argument('--noiseInit', type=float, default=noiseInit)
     parser.add_argument('--noiseInner', type=float, default=noiseInner)
     parser.add_argument('--root', type=str, default='data/cifar10-py')
     parser.add_argument('--mode', type=str, default='test')  # peek or test
     parser.add_argument('--ensemble', type=int, default=1)
-    parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--channel', type=str,
-                        # default='gauss_torch'
-                        default='empty'
+                        # default='gauss_torch',
+                        # default='round',
+                        # default='empty',
+                        # default='fft',
+                        # default='uniform',
+                        # default='svd',
+                        default='laplace',
                         )
     parser.add_argument('--noise_type', type=str,
-                        # default='standard',
-                        default='backward',
+                        default='standard',
+                        # default='backward',
                         )
-    parser.add_argument('--attack_iters', type=int, default=10000)
+    parser.add_argument('--attack_iters', type=int, default=300)
     parser.add_argument('--gradient_iters', type=int, default=1)
     parser.add_argument('--eot_sample_size', type=int, default=32)
+    parser.add_argument('--noise_epsilon', type=float,
+                        default=0.03,
+                        # default=50,
+                        # default=16,
+                        )
 
     opt = parser.parse_args()
     # parse c
-    opt.c = [float(c) for c in opt.c.split(' ')]
+    opt.c = [float(c) for c in opt.c.split(',')]
     print('params: ', opt)
     print('input model: ', opt.modelIn)
     if opt.mode == 'peek' and len(opt.c) != 1:
@@ -383,23 +403,29 @@ if __name__ == "__main__":
     assert data_test
     dataloader_test = DataLoader(data_test, batch_size=opt.batch_size,
                                  shuffle=False)
-    # print(f'Test accuracy on clean data for net: {test_accuracy(dataloader_test, net)}')
+    print('Test accuracy {} on clean data for net.'.format(
+        test_accuracy(dataloader_test, net)))
     # if netAttack is not None:
     #     print(f'Test accuracy on clean data for netAttack: {test_accuracy(dataloader_test, netAttack)}')
+
+    # attack_f = attack_eot_cw
+    # attack_f = attack_eot_pgd
+    attack_f = attack_cw
+    print('attack_f: ', attack_f)
+
     if opt.mode == 'peek':
         peek(dataloader_test, net, src_net, opt.c[0], attack_f,
              denormalize_layer)
     elif opt.mode == 'test':
-        print("#c, test accuracy")
+        print("#c, test accuracy, L2 distortion, time (sec)")
         for c in opt.c:
-            print('c: ', c)
-            # attack_f = attack_eot_cw
-            attack_f = attack_eot_pgd
-            print('attack_f: ', attack_f)
+            # print('c: ', c)
+            beg = time.time()
             acc, avg_distort = acc_under_attack(dataloader_test, net, c,
                                                 attack_f, opt,
                                                 netAttack=netAttack)
-            print("{}, {}, {}".format(c, acc, avg_distort))
+            timing = time.time() - beg
+            print("{}, {}, {}, {}".format(c, acc, avg_distort, timing))
             sys.stdout.flush()
     else:
         raise Exception(f'Unknown opt.mode: {opt.mode}')

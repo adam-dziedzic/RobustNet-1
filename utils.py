@@ -11,6 +11,36 @@ import math
 import torch.nn as nn
 import torch.nn.init as init
 
+import torch
+import numpy as np
+
+
+def next_power2(x):
+    """
+    :param x: an integer number
+    :return: the power of 2 which is the larger than x but the
+    smallest possible
+
+    >>> result = next_power2(5)
+    >>> np.testing.assert_equal(result, 8)
+    >>> result = next_power2(1)
+    >>> np.testing.assert_equal(result, 1)
+    >>> result = next_power2(2)
+    >>> np.testing.assert_equal(result, 2)
+    >>> result = next_power2(7)
+    >>> np.testing.assert_equal(result, 8)
+    >>> result = next_power2(9)
+    >>> np.testing.assert_equal(result, 16)
+    >>> result = next_power2(16)
+    >>> np.testing.assert_equal(result, 16)
+    >>> result = next_power2(64)
+    >>> np.testing.assert_equal(result, 64)
+    >>> result = next_power2(63)
+    >>> np.testing.assert_equal(result, 64)
+    """
+    # return math.pow(2, math.ceil(math.log2(x)))
+    return int(2 ** np.ceil(np.log2(x)))
+
 
 def get_mean_and_std(dataset):
     '''Compute the mean and std value of dataset.'''
