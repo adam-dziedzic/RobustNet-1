@@ -20,6 +20,8 @@ from channels import gauss_noise_torch
 from channels import uniform_noise_torch
 from channels import compress_svd_batch
 from channels import laplace_noise_torch
+from complex_mask import get_inverse_hyper_mask
+from channels import subtract_rgb
 
 
 def attack_cw_foolbox():
@@ -104,6 +106,13 @@ def attack_fgsm(input_v, label_v, net, epsilon):
     return adverse_v
 
 
+def attack_gauss(input_v, label_v, net, epsilon):
+    noise = gauss_noise_torch(epsilon=epsilon,
+                              images=input_v,
+                              bounds=(0, 1))
+    return input_v + noise
+
+
 def attack_rand_fgsm(input_v, label_v, net, epsilon):
     alpha = epsilon / 2
     loss_f = nn.CrossEntropyLoss()
@@ -168,6 +177,13 @@ def acc_under_attack(dataloader, net, c, attack_f, opt, netAttack=None):
         elif opt.channel == 'svd':
             adverse_v = compress_svd_batch(x=adverse_v,
                                            compress_rate=opt.noise_epsilon)
+        elif opt.channel == 'inv_fft':
+            adverse_v = fft_channel(input=adverse_v,
+                                    compress_rate=opt.noise_epsilon,
+                                    get_mask=get_inverse_hyper_mask)
+        elif opt.channel == 'sub_rgb':
+            adverse_v = subtract_rgb(images=adverse_v,
+                                     subtract_value=opt.noise_epsilon)
         else:
             raise Exception(f'Unknown channel: {opt.channel}')
         # defense
@@ -192,8 +208,8 @@ def acc_under_attack(dataloader, net, c, attack_f, opt, netAttack=None):
         # print(','.join([str(x) for x in info]))
 
         # This is a bit unexpected (shortens computations):
-        # if k >= 4:
-        #     break
+        if k >= 4:
+            break
 
     return correct / tot, np.sqrt(distort_np / tot)
 
@@ -287,8 +303,10 @@ if __name__ == "__main__":
                         )
     parser.add_argument('--modelInAttack', type=str,
                         default='./vgg16/' + modelAttack)
-    parser.add_argument('--c', type=str,
-                        default='0.0,0.0001,0.0005,0.001,0.005,0.01,0.05,0.1,0.5,1.0,10.0,100.0',
+    parser.add_argument('--c', type=float, nargs='+',
+                        default=[0.0, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.03,
+                                 0.04, 0.05, 0.1, 0.5, 1.0, 2.0],
+                        # default=[0.1],
                         # default = '1.0 10.0 100.0 1000.0',
                         # default='0.05,0.1,0.5,1.0,10.0,100.0',
                         )
@@ -302,10 +320,12 @@ if __name__ == "__main__":
                         # default='gauss_torch',
                         # default='round',
                         # default='empty',
-                        # default='fft',
+                        default='fft',
                         # default='uniform',
                         # default='svd',
-                        default='laplace',
+                        # default='laplace',
+                        # default='inv_fft',
+                        # default='sub_rgb'
                         )
     parser.add_argument('--noise_type', type=str,
                         default='standard',
@@ -314,15 +334,21 @@ if __name__ == "__main__":
     parser.add_argument('--attack_iters', type=int, default=300)
     parser.add_argument('--gradient_iters', type=int, default=1)
     parser.add_argument('--eot_sample_size', type=int, default=32)
-    parser.add_argument('--noise_epsilon', type=float,
-                        default=0.03,
-                        # default=50,
+    parser.add_argument('--noise_epsilons', type=float, nargs="+",
+                        # default=0.3,
+                        default=[50],
                         # default=16,
+                        # default=[1.,5.,10.,20.,30.,40.,50.],
+                        # default=[2 ** x for x in range(8, 0, -1)],
+                        # default=[x for x in range(256)],
+                        # default=[43.0], # for RGB reduction
+                        # default=[0.0],
+                        # default=[0.01, 0.1, 0.5, 1.0, 2.0, 3.0, 4.0]
                         )
 
     opt = parser.parse_args()
     # parse c
-    opt.c = [float(c) for c in opt.c.split(',')]
+    # opt.c = [float(c) for c in opt.c.split(',')]
     print('params: ', opt)
     print('input model: ', opt.modelIn)
     if opt.mode == 'peek' and len(opt.c) != 1:
@@ -417,15 +443,18 @@ if __name__ == "__main__":
         peek(dataloader_test, net, src_net, opt.c[0], attack_f,
              denormalize_layer)
     elif opt.mode == 'test':
-        print("#c, test accuracy, L2 distortion, time (sec)")
+        print("#c, noise, test accuracy, L2 distortion, time (sec)")
         for c in opt.c:
             # print('c: ', c)
-            beg = time.time()
-            acc, avg_distort = acc_under_attack(dataloader_test, net, c,
-                                                attack_f, opt,
-                                                netAttack=netAttack)
-            timing = time.time() - beg
-            print("{}, {}, {}, {}".format(c, acc, avg_distort, timing))
-            sys.stdout.flush()
+            for noise in opt.noise_epsilons:
+                opt.noise_epsilon = noise
+                beg = time.time()
+                acc, avg_distort = acc_under_attack(dataloader_test, net, c,
+                                                    attack_f, opt,
+                                                    netAttack=netAttack)
+                timing = time.time() - beg
+                print("{}, {}, {}, {}, {}".format(c, noise, acc, avg_distort,
+                                                  timing))
+                sys.stdout.flush()
     else:
         raise Exception(f'Unknown opt.mode: {opt.mode}')

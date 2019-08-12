@@ -87,6 +87,16 @@ def get_disk_mask(H, W, compress_rate, val=0, interpolate=None, onesided=True):
     return tensor_mask, array_mask
 
 
+def get_inverse_hyper_mask(H, W, compress_rate, val=0, interpolate=None,
+                           onesided=True):
+    mask, array_mask = get_hyper_mask(
+        H=H, W=W, compress_rate=compress_rate, val=val,
+        interpolate=interpolate, onesided=onesided)
+    mask = mask * (-1) + 1
+    array_mask = array_mask * (-1) + 1
+    return mask, array_mask
+
+
 def get_hyper_mask(H, W, compress_rate, val=0, interpolate=None,
                    onesided=True):
     # Compute the initial radius of the hyperdisk for onesided=False, the whole
@@ -97,6 +107,7 @@ def get_hyper_mask(H, W, compress_rate, val=0, interpolate=None,
     # below in the following way:
     side_len = H
     # There is only a slight difference in the areas between the onesided and
+
     # non-onesided cases but we perform the exact computation to limit the
     # errors to minimum.
     # if onesided:
