@@ -22,10 +22,34 @@ from channels import compress_svd_batch
 from channels import laplace_noise_torch
 from complex_mask import get_inverse_hyper_mask
 from channels import subtract_rgb
+from nattack import nattack
+from nattack import iterations as nattack_iterations
+from nattack import npop as nattack_population
 
 
 def attack_cw_foolbox():
     pass
+
+
+def nattack_wrapper(input_v, label_v, net, c=None, opt=None):
+    if opt is not None:
+        iterations = opt.attack_iters
+        population = opt.nattack_population
+    else:
+        iterations = nattack_iterations
+        population = nattack_population
+
+    adv_imgs = torch.zeros_like(input_v)
+    device = input_v.device
+    for i, (input, label) in enumerate(zip(input_v, label_v)):
+        adv_img = nattack(input=input, target=label, model=net,
+                          iterations=iterations, population=population)
+        if adv_img is not None:
+            adv_imgs[i] = adv_img.to(device)
+        else:
+            adv_imgs[i] = input
+    diff = adv_imgs - input_v
+    return adv_imgs, diff
 
 
 def attack_eot_pgd(input_v, label_v, net, epsilon=8.0 / 255.0, opt=None):
@@ -33,10 +57,6 @@ def attack_eot_pgd(input_v, label_v, net, epsilon=8.0 / 255.0, opt=None):
     adverse_v = eot.eot_batch(images=input_v, labels=label_v)
     diff = adverse_v - input_v
     return adverse_v, diff
-
-
-def attack_raw_pgd(input_v, label_v, net, epsilon=8.0 / 255.0, opt=None):
-    raw_pgd = RAW_PGD(model=net, )
 
 
 def attack_eot_cw(input_v, label_v, net, c, opt, untarget=True, n_class=10):
@@ -67,8 +87,10 @@ def attack_cw(input_v, label_v, net, c, opt, untarget=True, n_class=10):
         logits = torch.zeros(batch_size, n_class).cuda()
         for i in range(opt.gradient_iters):
             logits += net(adverse_v)
-        output = logits / opt.gradient_iters
-        # output = logits
+        if opt.gradient_iters > 0:
+            output = logits / opt.gradient_iters
+        else:
+            output = logits
         # The logits for the correct class labels.
         real = (torch.max(torch.mul(output, label_onehot), 1)[0])
         # Zero out the logits for the correct classes and even make them much
@@ -106,11 +128,14 @@ def attack_fgsm(input_v, label_v, net, epsilon):
     return adverse_v
 
 
-def attack_gauss(input_v, label_v, net, epsilon):
+def attack_gauss(input_v, label_v, net, epsilon, opt):
+    assert input_v.min() >= 0.0 and input_v.max() <= 1.0
     noise = gauss_noise_torch(epsilon=epsilon,
                               images=input_v,
                               bounds=(0, 1))
-    return input_v + noise
+    adverse_v = input_v + noise
+    diff = adverse_v - input_v
+    return adverse_v, diff
 
 
 def attack_rand_fgsm(input_v, label_v, net, epsilon):
@@ -201,17 +226,17 @@ def acc_under_attack(dataloader, net, c, attack_f, opt, netAttack=None):
         distort_linf_np = distort_linf.cpu().detach().numpy()
 
         elapsed = time.time() - beg
-        info = ['k', k, 'current_accuracy', correct / tot, 'L2 distortion',
-                np.sqrt(distort_np / tot), 'Linf distortion',
-                distort_linf_np / tot, 'total_count', tot, 'elapsed time (sec)',
-                elapsed]
+        # info = ['k', k, 'current_accuracy', correct / tot, 'L2 distortion',
+        #         np.sqrt(distort_np / tot), 'Linf distortion',
+        #         distort_linf_np / tot, 'total_count', tot, 'elapsed time (sec)',
+        #         elapsed]
         # print(','.join([str(x) for x in info]))
 
         # This is a bit unexpected (shortens computations):
-        if k >= 4:
+        if opt.limit_batch_number > 0 and k >= opt.limit_batch_number:
             break
 
-    return correct / tot, np.sqrt(distort_np / tot)
+    return correct / tot, np.sqrt(distort_np / tot), distort_linf_np / tot
 
 
 def peek(dataloader, net, src_net, c, attack_f, denormalize_layer):
@@ -251,6 +276,7 @@ def test_accuracy(dataloader, net):
 if __name__ == "__main__":
 
     mod = '0-0'  # mode init noise - inner noise
+    # mod = '2-1'
     if mod == '0-0':
         model = 'rse_0.0_0.0_ady.pth-test-accuracy-0.8523'
         modelAttack = model
@@ -304,9 +330,12 @@ if __name__ == "__main__":
     parser.add_argument('--modelInAttack', type=str,
                         default='./vgg16/' + modelAttack)
     parser.add_argument('--c', type=float, nargs='+',
-                        default=[0.0, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.03,
-                                 0.04, 0.05, 0.1, 0.5, 1.0, 2.0],
+                        default=[0.0, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.02,
+                                 0.03, 0.04, 0.05, 0.07, 0.08, 0.09, 0.1, 0.2,
+                                 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
                         # default=[0.1],
+                        # default=[0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.5],
+                        # default=[0.001, 0.03, 0.1],
                         # default = '1.0 10.0 100.0 1000.0',
                         # default='0.05,0.1,0.5,1.0,10.0,100.0',
                         )
@@ -315,14 +344,15 @@ if __name__ == "__main__":
     parser.add_argument('--root', type=str, default='data/cifar10-py')
     parser.add_argument('--mode', type=str, default='test')  # peek or test
     parser.add_argument('--ensemble', type=int, default=1)
-    parser.add_argument('--batch_size', type=int, default=256)
+    parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--channel', type=str,
                         # default='gauss_torch',
                         # default='round',
                         # default='empty',
-                        default='fft',
-                        # default='uniform',
                         # default='svd',
+                        default='uniform',
+                        # default='svd',
+                        # default='fft',
                         # default='laplace',
                         # default='inv_fft',
                         # default='sub_rgb'
@@ -331,12 +361,17 @@ if __name__ == "__main__":
                         default='standard',
                         # default='backward',
                         )
-    parser.add_argument('--attack_iters', type=int, default=300)
+    parser.add_argument('--attack_iters', type=int, default=500)
     parser.add_argument('--gradient_iters', type=int, default=1)
-    parser.add_argument('--eot_sample_size', type=int, default=32)
+    parser.add_argument('--eot_sample_size', type=int, default=1)
+    parser.add_argument('--limit_batch_number', type=int, default=32,
+                        help='If limit > 0, only that # of batches is '
+                             'processed. Set this param to 0 to process all '
+                             'batches.')
     parser.add_argument('--noise_epsilons', type=float, nargs="+",
-                        # default=0.3,
-                        default=[50],
+                        default=[0.03],
+                        # default=[50],
+                        # default = [0.07],
                         # default=16,
                         # default=[1.,5.,10.,20.,30.,40.,50.],
                         # default=[2 ** x for x in range(8, 0, -1)],
@@ -345,6 +380,7 @@ if __name__ == "__main__":
                         # default=[0.0],
                         # default=[0.01, 0.1, 0.5, 1.0, 2.0, 3.0, 4.0]
                         )
+    parser.add_argument('--nattack_population', type=int, default=100)
 
     opt = parser.parse_args()
     # parse c
@@ -424,9 +460,9 @@ if __name__ == "__main__":
         data_test = dst.STL10(opt.root, split='test', download=True,
                               transform=transform_test)
     else:
-        print("Invalid dataset")
-        exit(-1)
-    assert data_test
+        ex_str = "Invalid dataset"
+        print(ex_str)
+        raise Exception(ex_str)
     dataloader_test = DataLoader(data_test, batch_size=opt.batch_size,
                                  shuffle=False)
     print('Test accuracy {} on clean data for net.'.format(
@@ -437,24 +473,30 @@ if __name__ == "__main__":
     # attack_f = attack_eot_cw
     # attack_f = attack_eot_pgd
     attack_f = attack_cw
+    # attack_f = attack_gauss
+    # attack_f = nattack_wrapper
     print('attack_f: ', attack_f)
 
     if opt.mode == 'peek':
+        src_net = net
         peek(dataloader_test, net, src_net, opt.c[0], attack_f,
              denormalize_layer)
     elif opt.mode == 'test':
-        print("#c, noise, test accuracy, L2 distortion, time (sec)")
+        print("#c, noise, test accuracy, L2 distortion, L inf distortion, time (sec)")
         for c in opt.c:
             # print('c: ', c)
             for noise in opt.noise_epsilons:
                 opt.noise_epsilon = noise
                 beg = time.time()
-                acc, avg_distort = acc_under_attack(dataloader_test, net, c,
-                                                    attack_f, opt,
-                                                    netAttack=netAttack)
+                acc, avg_L2distort, avg_Linfdistort = acc_under_attack(
+                    dataloader_test, net, c,
+                    attack_f, opt,
+                    netAttack=netAttack)
                 timing = time.time() - beg
-                print("{}, {}, {}, {}, {}".format(c, noise, acc, avg_distort,
-                                                  timing))
+                print("{}, {}, {}, {}, {}, {}".format(c, noise, acc,
+                                                      avg_L2distort,
+                                                      avg_Linfdistort,
+                                                      timing))
                 sys.stdout.flush()
     else:
         raise Exception(f'Unknown opt.mode: {opt.mode}')
